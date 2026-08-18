@@ -158,6 +158,38 @@
   .modeline button{background:var(--slab-2);border:1px solid var(--line);border-radius:999px;
     padding:7px 13px;font-size:.78rem;color:var(--chalk);flex:none}
 
+  .cal{padding:14px}
+  .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .calhead span{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.3rem;
+    text-transform:uppercase;letter-spacing:.01em}
+  .calhead button{width:42px;height:42px;border-radius:11px;background:var(--slab-2);font-size:1.4rem;
+    display:flex;align-items:center;justify-content:center}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .wd{text-align:center;font-size:.6rem;letter-spacing:.1em;color:var(--steel);padding-bottom:5px}
+  .cell{aspect-ratio:1;border-radius:9px;background:#191C21;border:1px solid transparent;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0}
+  .cell .d{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:1rem;color:var(--steel);line-height:1}
+  .cell.has .d{color:var(--chalk)}
+  .cell.today{border-color:var(--steel)}
+  .cell.sel{background:var(--plate)}
+  .cell.sel .d{color:#fff}
+  .dots2{display:flex;gap:3px;height:5px;align-items:center}
+  .dots2 i{width:5px;height:5px;border-radius:50%;display:block}
+  .dots2 .lift{background:var(--plate)}
+  .cell.sel .dots2 .lift{background:#fff}
+  .dots2 .car{background:var(--good)}
+  .dots2 .bw{background:var(--steel)}
+  .cell.sel .dots2 .bw{background:#cfe0ff}
+  .legend{display:flex;gap:14px;margin-top:12px;font-size:.7rem;color:var(--steel);flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .legend i{width:6px;height:6px;border-radius:50%;display:block}
+  .detrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .detrow:last-child{border-bottom:0}
+  .detrow .l{flex:1;font-size:.9rem}
+  .detrow .r{color:var(--steel)}
+  .histbtn{width:100%;background:var(--slab-2);border:1px solid var(--line);border-radius:12px;
+    padding:14px;font-weight:600;font-size:.92rem;margin-top:10px}
+
   .foot{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);display:flex;gap:8px;
     align-items:center;font-size:.76rem;color:var(--steel)}
   .foot button{background:var(--slab-2);border:1px solid var(--line);border-radius:999px;
@@ -358,6 +390,14 @@ function bar(){
       <button class="pill" id="fin">Finish</button>`;
     $("fin").onclick=finish;
     $("back").onclick=()=>{clearInterval(timer);$("rest").classList.remove("up");view="home";render();};
+  }else if(view==="history"){
+    b.innerHTML=`<button class="pill" id="hback">‹</button><div class="spacer"></div>
+      <div class="bar-note">History</div><div class="spacer"></div>
+      <div class="who"><button data-p="ben" aria-pressed="${who==='ben'}">Ben</button>
+      <button data-p="bria" aria-pressed="${who==='bria'}">Bria</button></div>`;
+    $("hback").onclick=()=>{view="home";render();};
+    b.querySelectorAll("[data-p]").forEach(el=>el.onclick=async()=>{
+      who=el.dataset.p;if(!store[who])await load(who);hist.sel=null;render();});
   }else{
     b.innerHTML=`<div class="who">
         <button data-p="ben" aria-pressed="${who==='ben'}">Ben</button>
@@ -420,6 +460,7 @@ function home(){
   }
   h+=`</div>`;
 
+  h+=`<button class="histbtn" id="histBtn">Full history ›</button>`;
   h+=`<div class="eyebrow">Train something else</div><div class="daylist">`;
   p.days.forEach((dd,i)=>{if(i===ni)return;
     h+=`<button class="dayrow" data-d="${i}"><span class="idx num">${i+1}</span>
@@ -436,6 +477,7 @@ function home(){
   $("app").innerHTML=h;
   $("go").onclick=()=>start(ni);
   wireBackup();
+  if($("histBtn"))$("histBtn").onclick=()=>{hist.y=null;hist.sel=today();view="history";render();window.scrollTo(0,0);};
   if($("resBtn"))$("resBtn").onclick=()=>resumeSession();
   if($("discBtn"))$("discBtn").onclick=async()=>{
     delete store[who].active;await save(who);render();toast("Discarded");};
@@ -594,8 +636,9 @@ async function finish(){
     d.last[e.n]={date:Date.now(),w:e.w,rep:e.rep,sets:e.sets};});
   const flags=sess.ex.filter(e=>e.knee>=2).map(e=>e.n);
   if(logged.length){
-    d.sessions.push({date:Date.now(),dayName:sess.dayName,sets,kneeFlags:flags});
-    if(d.sessions.length>80)d.sessions=d.sessions.slice(-80);
+    d.sessions.push({date:Date.now(),dayName:sess.dayName,sets,kneeFlags:flags,
+      ex:logged.map(e=>({n:e.n,w:e.w,rep:e.rep,sets:e.sets}))});
+    if(d.sessions.length>400)d.sessions=d.sessions.slice(-400);
     d.lastDay=sess.di;
   }
   delete d.active;
@@ -617,6 +660,97 @@ function summary(){
   $("app").innerHTML=h;
   $("hm").onclick=()=>{view="home";render();};
   $("ch").onclick=()=>{view="home";render();openSheet("cardio");};
+}
+
+
+/* ================= history calendar ================= */
+let hist={y:null,m:null,sel:null};
+const MON=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function dk(y,m,d){return y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");}
+function sessionsOn(k){return store[who].sessions.filter(s=>iso(s.date)===k);}
+function prettyDate(k){const [y,m,d]=k.split("-").map(Number);
+  return new Date(y,m-1,d).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});}
+
+function history(){
+  const now=new Date();
+  if(hist.y===null){hist.y=now.getFullYear();hist.m=now.getMonth();}
+  const y=hist.y,m=hist.m;
+  const start=new Date(y,m,1).getDay(),len=new Date(y,m+1,0).getDate();
+  let lifts=0,cardio=0,steps=[],bws=[];
+  let h=`<div class="eyebrow">History</div><div class="card cal">
+    <div class="calhead"><button data-mv="-1" aria-label="Previous month">‹</button>
+      <span>${MON[m]} ${y}</span>
+      <button data-mv="1" aria-label="Next month">›</button></div><div class="grid">`;
+  ["S","M","T","W","T","F","S"].forEach(d=>{h+=`<div class="wd">${d}</div>`;});
+  for(let i=0;i<start;i++)h+=`<div></div>`;
+  for(let d=1;d<=len;d++){
+    const k=dk(y,m,d),rec=store[who].daily[k],ses=sessionsOn(k);
+    const hasC=rec&&rec.cardio&&rec.cardio.length,hasB=rec&&rec.bw;
+    if(ses.length)lifts++;
+    if(hasC)cardio+=rec.cardio.length;
+    if(rec&&rec.steps)steps.push(rec.steps);
+    if(hasB)bws.push({k,v:rec.bw});
+    const any=ses.length||hasC||hasB||(rec&&rec.steps);
+    h+=`<button class="cell ${any?'has':''} ${hist.sel===k?'sel':''} ${k===today()?'today':''}" data-day="${k}">
+      <span class="d">${d}</span><span class="dots2">${ses.length?'<i class="lift"></i>':''}${hasC?'<i class="car"></i>':''}${hasB?'<i class="bw"></i>':''}</span></button>`;
+  }
+  h+=`</div><div class="legend">
+    <span><i class="lift" style="background:var(--plate)"></i>Lift</span>
+    <span><i class="car" style="background:var(--good)"></i>Cardio</span>
+    <span><i class="bw" style="background:var(--steel)"></i>Weigh-in</span></div></div>`;
+
+  h+=`<div class="card week" style="margin-top:10px">
+    <div class="wrow"><span class="l">Sessions</span><span class="v">${lifts}</span></div>
+    <div class="wrow"><span class="l">Cardio</span><span class="v">${cardio}</span></div>
+    <div class="wrow"><span class="l">Avg steps</span><span class="v">${steps.length?(steps.reduce((a,b)=>a+b,0)/steps.length/1000).toFixed(1)+"k":"—"}</span></div>`;
+  if(bws.length>1){
+    bws.sort((a,b)=>a.k<b.k?-1:1);
+    const ch=bws[bws.length-1].v-bws[0].v;
+    h+=`<div class="wrow"><span class="l">Weight change</span>
+      <span class="v" style="color:${ch<0?'var(--good)':'var(--chalk)'}">${ch>0?"+":""}${(Math.round(ch*10)/10)}</span></div>`;
+  }
+  h+=`</div>`;
+  if(hist.sel)h+=dayDetail(hist.sel);
+  else h+=`<div class="empty" style="margin-top:16px">Tap any day to see what you did.</div>`;
+
+  $("app").innerHTML=h;
+  document.querySelectorAll("[data-mv]").forEach(el=>el.onclick=()=>{
+    let m2=hist.m+ +el.dataset.mv;
+    if(m2<0){m2=11;hist.y--;} else if(m2>11){m2=0;hist.y++;}
+    hist.m=m2;history();});
+  document.querySelectorAll("[data-day]").forEach(el=>el.onclick=()=>{
+    hist.sel=hist.sel===el.dataset.day?null:el.dataset.day;history();});
+}
+
+function dayDetail(k){
+  const rec=store[who].daily[k]||{cardio:[],steps:null,bw:null};
+  const ses=sessionsOn(k);
+  let h=`<div class="eyebrow">${prettyDate(k)}</div>`;
+  if(!ses.length&&!(rec.cardio||[]).length&&!rec.steps&&!rec.bw)
+    return h+`<div class="card week"><div class="empty">Nothing logged this day.</div></div>`;
+  ses.forEach(s=>{
+    h+=`<div class="card week" style="margin-bottom:8px">
+      <div class="detrow"><span class="l"><b>${esc(s.dayName)}</b></span><span class="r">${s.sets} sets</span></div>`;
+    if(s.ex&&s.ex.length){
+      s.ex.forEach(e=>{h+=`<div class="detrow"><span class="l">${esc(e.n)}</span>
+        <span class="r mono">${fw(e.w)} × ${e.rep} × ${e.sets}</span></div>`;});
+    }else{
+      h+=`<div class="detrow"><span class="empty">Logged before exercise detail was saved.</span></div>`;
+    }
+    if(s.kneeFlags&&s.kneeFlags.length)
+      h+=`<div class="warnbox" style="margin-top:10px">Knee flagged: ${s.kneeFlags.map(esc).join(", ")}</div>`;
+    h+=`</div>`;
+  });
+  const bits=[];
+  (rec.cardio||[]).forEach(c=>bits.push([c.type,c.min+" min"]));
+  if(rec.steps)bits.push(["Steps",(rec.steps/1000).toFixed(1)+"k"]);
+  if(rec.bw)bits.push(["Bodyweight",fw(rec.bw)+" lb"]);
+  if(bits.length){
+    h+=`<div class="card week">`;
+    bits.forEach(b=>{h+=`<div class="detrow"><span class="l">${esc(b[0])}</span><span class="r mono">${esc(b[1])}</span></div>`;});
+    h+=`</div>`;
+  }
+  return h;
 }
 
 
@@ -642,7 +776,11 @@ function wireBackup(){
   };
 }
 
-function render(){bar();view==="home"?home():view==="session"?session():summary();}
+function render(){bar();
+  if(view==="home")home();
+  else if(view==="session")session();
+  else if(view==="history")history();
+  else summary();}
 (async()=>{await load("ben");await load("bria");render();})();
 </script>
 </body>
